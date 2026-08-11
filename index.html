@@ -13,6 +13,20 @@
   html,body{margin:0;height:100%;height:100dvh;overflow:hidden;overscroll-behavior:none;touch-action:none;font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif;background:#05131f;color:#fff;-webkit-user-select:none;user-select:none}
   #app{height:100%;height:100dvh;display:flex;flex-direction:column;padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
   
+  /* 偽全螢幕相容樣式 (針對 iOS Safari / 不支援原生 Fullscreen API 的手機) */
+  body.pseudo-fullscreen #app {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    z-index: 99999 !important;
+    background: #05131f;
+  }
+
   /* Header UI */
   header{height:78px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:10px 22px;padding-top:calc(10px + env(safe-area-inset-top));background:rgba(3,16,28,.94);border-bottom:1px solid rgba(255,255,255,.12);z-index:5}
   .title{font-size:22px;font-weight:800;letter-spacing:1.5px;color:#f0f8ff;display:flex;align-items:center;gap:8px;white-space:nowrap}
@@ -120,9 +134,7 @@
     color: #05131f;
   }
 
-  /* ===== Landscape phone optimization (primary target: play in landscape) ===== */
-
-  /* Tier 1 — typical landscape phones, e.g. 700-950px wide, 320-540px tall */
+  /* Responsive Media Queries */
   @media (max-height: 540px) and (orientation: landscape) {
     header { height: 46px; padding: 4px 14px; padding-top: calc(4px + env(safe-area-inset-top)); }
     .title { font-size: 15px; gap: 5px; }
@@ -138,7 +150,6 @@
     #fogToast { top: 44px; font-size: 11px; padding: 6px 14px; }
     #status { display: none; }
 
-    /* Wheel gets to be the hero control — enlarge tap targets since width is plentiful */
     #wheelPanel { width: 132px; padding: 7px; right: calc(14px + env(safe-area-inset-right)); bottom: calc(14px + env(safe-area-inset-bottom)); }
     .panelTitle { font-size: 10px; margin-bottom: 5px; }
     .wheel { width: 100px; height: 100px; }
@@ -148,7 +159,6 @@
     .smallHint { font-size: 9px; margin-top: 4px; }
   }
 
-  /* Tier 2 — very short landscape (small phones / split-screen), e.g. iPhone SE landscape */
   @media (max-height: 400px) and (orientation: landscape) {
     header { height: 38px; padding: 3px 12px; }
     .title { font-size: 13px; }
@@ -173,7 +183,6 @@
     #restart { margin-top: 12px; padding: 9px 20px; font-size: 13px; }
   }
 
-  /* Portrait phones/tablets (fallback if the rotate prompt is dismissed) */
   @media (max-width: 800px) and (orientation: portrait) {
     header { height: 66px; padding: 8px 12px; }
     .title { font-size: 17px; }
@@ -216,7 +225,7 @@
 </div>
 
 <div id="fogToast">✨ 航程已達三分之一！前方海霧散去，目視寶藏島！</div>
-<div id="status">地圖狀態：擴大探勘區域　｜　目標：未知秘境 🏝️</div>
+<div id="status">地圖狀態：擴大探勘區域 ｜ 目標：未知秘境 🏝️</div>
 
 <div id="wheelPanel">
   <div class="panelTitle">舵輪｜選擇航向角度</div>
@@ -282,20 +291,88 @@ if (dismissRotate) {
   });
 }
 
+// ---------------------------------------------------------------------
+// 🛠️ 修正後的全螢幕邏輯 (支援 Android + iOS 偽全螢幕模式)
+// ---------------------------------------------------------------------
 const fullscreenBtn = document.getElementById('fullscreenBtn');
-async function toggleFullscreen() {
-  try {
-    if (!document.fullscreenElement) {
-      await (document.documentElement.requestFullscreen ? document.documentElement.requestFullscreen() : Promise.resolve());
-      if (screen.orientation && screen.orientation.lock) {
-        try { await screen.orientation.lock('landscape'); } catch (e) { /* not supported on this device, ignore */ }
-      }
-      fullscreenBtn.textContent = '⛶';
-    } else {
-      if (document.exitFullscreen) await document.exitFullscreen();
-    }
-  } catch (e) { /* fullscreen not available (e.g. iOS Safari) — silently ignore */ }
+
+function getFullscreenElement() {
+  return document.fullscreenElement ||
+         document.webkitFullscreenElement ||
+         document.mozFullScreenElement ||
+         document.msFullscreenElement || null;
 }
+
+async function toggleFullscreen() {
+  const isPseudo = document.body.classList.contains('pseudo-fullscreen');
+  const nativeEl = getFullscreenElement();
+
+  if (!nativeEl && !isPseudo) {
+    // 進入全螢幕
+    const docEl = document.documentElement;
+    const req = docEl.requestFullscreen ||
+                docEl.webkitRequestFullscreen ||
+                docEl.mozRequestFullScreen ||
+                docEl.msRequestFullscreen;
+
+    let nativeSuccess = false;
+    if (req) {
+      try {
+        await req.call(docEl);
+        nativeSuccess = true;
+      } catch (e) {
+        nativeSuccess = false;
+      }
+    }
+
+    // 若瀏覽器不支援原生全螢幕 (如 iPhone Safari)，啟動 CSS 偽全螢幕備援機制
+    if (!nativeSuccess && !getFullscreenElement()) {
+      document.body.classList.add('pseudo-fullscreen');
+      window.scrollTo(0, 1);
+    }
+
+    // 嘗試鎖定為橫向（僅部分流動瀏覽器支援）
+    if (screen.orientation && screen.orientation.lock) {
+      try {
+        await screen.orientation.lock('landscape');
+      } catch (e) { /* ignore fallback */ }
+    }
+
+    fullscreenBtn.textContent = '✕';
+  } else {
+    // 退出全螢幕
+    const exit = document.exitFullscreen ||
+                 document.webkitExitFullscreen ||
+                 document.mozCancelFullScreen ||
+                 document.msExitFullscreen;
+
+    if (exit && getFullscreenElement()) {
+      try { await exit.call(document); } catch (e) {}
+    }
+
+    document.body.classList.remove('pseudo-fullscreen');
+
+    if (screen.orientation && screen.orientation.unlock) {
+      try { screen.orientation.unlock(); } catch (e) {}
+    }
+
+    fullscreenBtn.textContent = '⛶';
+  }
+
+  // 延遲更新畫布尺寸以適應視窗改變
+  setTimeout(resize, 150);
+}
+
+// 監聽原生退出全螢幕事件（例如使用者按 ESC 或系統動作退出）
+['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach(evt => {
+  document.addEventListener(evt, () => {
+    if (!getFullscreenElement() && !document.body.classList.contains('pseudo-fullscreen')) {
+      fullscreenBtn.textContent = '⛶';
+    }
+    setTimeout(resize, 150);
+  });
+});
+
 if (fullscreenBtn) fullscreenBtn.addEventListener('click', toggleFullscreen);
 
 let W = 0, H = 0, timer = null;
@@ -321,7 +398,6 @@ let reefs = [];
 let waveZones = [];
 let currentScenarioName = "";
 
-// 5 Expanded Scenarios with targets in various directions
 const scenarioTemplates = [
   {
     name: "【東北遠航線】穿越沉船狹灣與暗礁",
@@ -411,7 +487,6 @@ function adjustWheelPosition() {
   const [sx, sy] = worldToScreen(state.start.x, state.start.z);
   const [tx, ty] = worldToScreen(target.x, target.z);
 
-  // Candidate corner positions with panel center coordinates
   const candidates = [
     { pos: { right: '20px', bottom: '20px', left: 'auto', top: 'auto' }, cx: W - 85, cy: H - 95 },
     { pos: { left: '20px', bottom: '20px', right: 'auto', top: 'auto' }, cx: 85, cy: H - 95 },
@@ -422,7 +497,6 @@ function adjustWheelPosition() {
   let bestCandidate = candidates[0];
   let maxMinDist = -1;
 
-  // Find candidate corner that maximizes clearance from both start and target positions
   candidates.forEach(c => {
     const distToStart = Math.hypot(c.cx - sx, c.cy - sy);
     const distToTarget = Math.hypot(c.cx - tx, c.cy - ty);
@@ -469,27 +543,21 @@ function loadScenario() {
 
   waveZones = [];
   
-  // 地圖周邊區域產生浪高 2.0m 以上巨浪壁，迫使玩家從地圖中央通道穿越礁石區
   for (let z = 3; z <= 47; z += 3.5) {
-    // 左側周邊巨浪壁 (x ≈ -12 ~ -8.5)
     waveZones.push({ x: -12.0, z: z, h: +(2.1 + Math.random() * 0.5).toFixed(1), r: 2.2 });
     waveZones.push({ x: -8.5, z: z + 1.7, h: +(2.0 + Math.random() * 0.4).toFixed(1), r: 2.0 });
     
-    // 右側周邊巨浪壁 (x ≈ 8.5 ~ 12)
     waveZones.push({ x: 12.0, z: z, h: +(2.1 + Math.random() * 0.5).toFixed(1), r: 2.2 });
     waveZones.push({ x: 8.5, z: z + 1.7, h: +(2.0 + Math.random() * 0.4).toFixed(1), r: 2.0 });
   }
 
   for (let x = -13; x <= 13; x += 3.5) {
     if (Math.abs(x) > 4.5) {
-      // 上邊界巨浪壁
       waveZones.push({ x: x, z: 3.0, h: +(2.2 + Math.random() * 0.4).toFixed(1), r: 2.2 });
-      // 下邊界巨浪壁
       waveZones.push({ x: x, z: 47.0, h: +(2.2 + Math.random() * 0.4).toFixed(1), r: 2.2 });
     }
   }
 
-  // 地圖中央通道（x 在 -4 ~ 4 之間）設置安全浪高 (0.8m ~ 1.4m)，玩家可通行但需應對礁石
   for (let z = 7; z <= 43; z += 5) {
     for (let x = -4; x <= 4; x += 4) {
       waveZones.push({
@@ -501,7 +569,6 @@ function loadScenario() {
     }
   }
 
-  // 移除起點與終點緊鄰區域的 >2.0m 巨浪，確保起航與登島順暢
   waveZones = waveZones.filter(w => {
     const distToStart = Math.hypot(w.x - state.start.x, w.z - state.start.z);
     const distToTarget = Math.hypot(w.x - target.x, w.z - target.z);
@@ -529,14 +596,12 @@ function loadScenario() {
 function draw() {
   ctx.clearRect(0, 0, W, H);
 
-  // Ocean gradient background
   const oceanGrad = ctx.createLinearGradient(0, 0, 0, H);
   oceanGrad.addColorStop(0, '#073c52');
   oceanGrad.addColorStop(1, '#031c2b');
   ctx.fillStyle = oceanGrad;
   ctx.fillRect(0, 0, W, H);
 
-  // Dynamic wave grid lines
   ctx.globalAlpha = .14;
   for (let y = 80; y < H; y += 36) {
     ctx.beginPath();
@@ -548,14 +613,12 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
-  // Map Boundary Dotted Corridor
   const [lx] = worldToScreen(WORLD.minX, 0), [rx] = worldToScreen(WORLD.maxX, 0);
   ctx.strokeStyle = 'rgba(255,255,255,.12)';
   ctx.setLineDash([6, 6]);
   ctx.strokeRect(lx, 80, rx - lx, H - 104);
   ctx.setLineDash([]);
 
-  // Wave Zones
   waveZones.forEach(q => {
     const [x, y] = worldToScreen(q.x, q.z);
     const rr = q.r * (W / (WORLD.maxX - WORLD.minX));
@@ -570,7 +633,6 @@ function draw() {
     ctx.fillText(q.h + 'm', x, y + 3);
   });
 
-  // Reef Hazards
   reefs.forEach(q => {
     const [x, y] = worldToScreen(q.x, q.z);
     const rr = q.r * (W / (WORLD.maxX - WORLD.minX));
@@ -601,7 +663,6 @@ function draw() {
     ctx.fillText('暗礁', x, y + rr + 12);
   });
 
-  // Target Island Rendering (Hidden under fog until 1/3 progress reached)
   const [tx, ty] = worldToScreen(target.x, target.z);
   if (state.islandRevealed) {
     ctx.beginPath();
@@ -637,7 +698,6 @@ function draw() {
     ctx.arc(tx, ty, fogRadius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Layered cloud puffs to expand visually to 1/3 of map region
     const cloudOffsets = [
       [-0.4, -0.2, 0.6], [0.4, -0.3, 0.55], [-0.3, 0.3, 0.65],
       [0.35, 0.35, 0.58], [0, 0, 0.75]
@@ -665,14 +725,12 @@ function draw() {
     ctx.shadowBlur = 0;
   }
 
-  // Ship Center Screen Position
   const [sx, sy] = worldToScreen(state.x, state.z);
   const headingRad = state.heading * Math.PI / 180;
 
   ctx.save();
   ctx.translate(sx, sy);
 
-  // Ship Shadow
   ctx.save();
   ctx.rotate(headingRad);
   ctx.translate(2, 6);
@@ -682,7 +740,6 @@ function draw() {
   ctx.fill();
   ctx.restore();
 
-  // Boat Hull & Deck (Rotates with state.heading)
   ctx.save();
   ctx.rotate(headingRad);
 
@@ -715,7 +772,6 @@ function draw() {
   ctx.stroke();
   ctx.restore();
 
-  // Sail Geometry Mandate: Apex stays fixed pointing UP, Bottom corners rotate with ship
   const cosH = Math.cos(headingRad), sinH = Math.sin(headingRad);
   
   const blX = -16 * cosH - (-2) * sinH;
@@ -776,7 +832,6 @@ function draw() {
 
   ctx.restore();
 
-  // Heading Line (Dotted direction indicator)
   ctx.save();
   ctx.setLineDash([5, 5]);
   ctx.beginPath();
@@ -922,8 +977,6 @@ document.querySelectorAll('.dirBtn').forEach(b => {
 
 document.getElementById('restart').addEventListener('click', loadScenario);
 
-// Drag-to-steer: let players spin the wheel with a finger/mouse drag, snapping to the
-// nearest 45° heading on release — a faster, more tactile control for landscape play.
 (function setupWheelDrag() {
   const wheelEl = document.getElementById('wheelControl');
   if (!wheelEl || !wheelRotor) return;
