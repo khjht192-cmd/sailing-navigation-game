@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#05131f">
+<title>航海任務｜方位角實戰探索版</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;height:100dvh;overflow:hidden;overscroll-behavior:none;touch-action:none;font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif;background:#05131f;color:#fff;-webkit-user-select:none;user-select:none}
+  #app{height:100%;height:100dvh;display:flex;flex-direction:column;padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+  
+  /* Header UI */
+  header{height:78px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:10px 22px;padding-top:calc(10px + env(safe-area-inset-top));background:rgba(3,16,28,.94);border-bottom:1px solid rgba(255,255,255,.12);z-index:5}
+  .title{font-size:22px;font-weight:800;letter-spacing:1.5px;color:#f0f8ff;display:flex;align-items:center;gap:8px;white-space:nowrap}
+  .subtitle{font-size:12px;color:#8cb3ca;margin-top:2px}
+  .hud{display:flex;gap:14px;align-items:center;flex-shrink:0}
+  .hudBox{min-width:140px;padding:7px 14px;border-radius:12px;background:#0f2738;border:1px solid rgba(140,200,230,.25);box-shadow:inset 0 1px 3px rgba(0,0,0,.4)}
+  .hudLabel{font-size:11px;color:#83a7be;font-weight:600;white-space:nowrap}
+  .hudValue{font-size:20px;font-weight:800;color:#ffd76a}
+  #time{font-variant-numeric:tabular-nums}
+  #fullscreenBtn{flex-shrink:0;width:38px;height:38px;border-radius:10px;background:#0f2738;border:1px solid rgba(140,200,230,.25);color:#ffd76a;font-size:17px;display:flex;align-items:center;justify-content:center;cursor:pointer;margin-left:10px}
+  #fullscreenBtn:active{background:#1a3d52}
+  
+  /* Canvas Area */
+  #main{position:relative;flex:1;min-height:0;background:#042838}
+  canvas{display:block;width:100%;height:100%;touch-action:none}
+  
+  /* Floating Overlay UI Elements */
+  #advice{position:absolute;top:18px;left:50%;transform:translateX(-50%);width:min(680px,calc(100% - 32px));padding:12px 20px;border-radius:16px;background:rgba(5,22,35,.9);border:1px solid rgba(152,220,240,.5);box-shadow:0 10px 30px rgba(0,0,0,.35);text-align:center;backdrop-filter:blur(8px);z-index:6}
+  #advice b{color:#ffd76a;font-size:15px;letter-spacing:1px}
+  .adviceText{margin-top:4px;font-size:15px;color:#e1f3f8;line-height:1.4}
+  
+  #fogToast{position:absolute;top:85px;left:50%;transform:translateX(-50%);padding:8px 18px;border-radius:30px;background:rgba(255,193,7,.9);color:#102230;font-weight:800;font-size:13px;box-shadow:0 4px 15px rgba(0,0,0,.3);pointer-events:none;opacity:0;transition:opacity .5s ease, transform .5s ease;z-index:7;white-space:nowrap}
+  #fogToast.show{opacity:1;transform:translateX(-50%) translateY(5px)}
+  
+  #status{position:absolute;top:18px;right:22px;padding:8px 14px;border-radius:10px;background:rgba(4,24,37,.75);border:1px solid rgba(255,255,255,.1);font-size:12px;color:#b2d4e3;z-index:6;backdrop-filter:blur(4px)}
+  
+  /* Navigation Wheel Panel */
+  #wheelPanel{position:absolute;right:calc(20px + env(safe-area-inset-right));bottom:calc(20px + env(safe-area-inset-bottom));width:142px;padding:9px;border-radius:18px;background:rgba(4,20,32,.9);border:1px solid rgba(255,255,255,.15);box-shadow:0 8px 25px rgba(0,0,0,.4);z-index:6;transition:top 0.4s ease, bottom 0.4s ease, left 0.4s ease, right 0.4s ease;touch-action:none}
+  .panelTitle{font-size:11px;color:#8fb6cd;text-align:center;margin-bottom:8px;font-weight:700}
+  .wheel{position:relative;width:112px;height:112px;margin:auto;touch-action:none;cursor:grab}
+  .wheel.dragging{cursor:grabbing}
+  .wheelRotor{position:absolute;inset:0;transition:transform .4s cubic-bezier(.34,1.4,.64,1)}
+  .wheelRotor.noTransition{transition:none}
+  .wheelRing{position:absolute;inset:0;border:6px solid #8c5b30;border-radius:50%;box-shadow:0 0 0 3px #472b18,inset 0 0 0 3px #cc9b60}
+  .spoke{position:absolute;left:50%;top:50%;width:6px;height:74px;background:#a06a38;border-radius:4px;transform-origin:50% 100%}
+  .hub{position:absolute;left:50%;top:50%;width:26px;height:26px;transform:translate(-50%,-50%);border-radius:50%;background:#d8aa6e;border:4px solid #472b18;z-index:3}
+  
+  .dirBtn{position:absolute;min-width:30px;height:22px;padding:0 3px;border-radius:8px;background:#133c52;border:1px solid #52829c;color:#ffffff;font-weight:800;font-size:10px;z-index:4;cursor:pointer;transition:all .12s ease;box-shadow:0 2px 5px rgba(0,0,0,.3)}
+  .dirBtn::after{content:'';position:absolute;inset:-9px;z-index:1}
+  .dirBtn:hover{background:#1f5e80;border-color:#82c4e6;transform:scale(1.1)}
+  .dirBtn:active{transform:scale(.95);background:#2a7096}
+  
+  .bN{left:50%;top:-2px;transform:translateX(-50%)}
+  .bNE{right:0px;top:10px}
+  .bE{right:-5px;top:50%;transform:translateY(-50%)}
+  .bSE{right:0px;bottom:10px}
+  .bS{left:50%;bottom:-2px;transform:translateX(-50%)}
+  .bSW{left:0px;bottom:10px}
+  .bW{left:-5px;top:50%;transform:translateY(-50%)}
+  .bNW{left:0px;top:10px}
+  .smallHint{font-size:10px;color:#7b9daf;text-align:center;margin-top:6px;line-height:1.2}
+
+  /* End Game Modal */
+  #message{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(500px,calc(100% - 40px));padding:30px;border-radius:24px;background:rgba(5,20,32,.96);border:1px solid rgba(255,224,130,.3);text-align:center;display:none;z-index:10;box-shadow:0 25px 70px rgba(0,0,0,.6);backdrop-filter:blur(10px)}
+  #message h2{margin:0 0 12px;font-size:28px;color:#ffd76a}
+  .msg{color:#d0e5ef;line-height:1.7;font-size:15px}
+  #restart{margin-top:22px;padding:12px 28px;border-radius:12px;background:#ffd76a;color:#0b1924;font-weight:800;font-size:15px;border:none;cursor:pointer;transition:.15s ease}
+  #restart:hover{background:#ffe394;transform:translateY(-2px)}
+
+  /* Orientation Prompt Overlay */
+  #rotateOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(3, 14, 24, 0.96);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    text-align: center;
+    backdrop-filter: blur(12px);
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+  }
+  #rotateOverlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .phoneIcon {
+    font-size: 56px;
+    margin-bottom: 16px;
+    animation: rotatePhone 2.2s infinite ease-in-out;
+  }
+  @keyframes rotatePhone {
+    0%, 15% { transform: rotate(0deg); }
+    45%, 65% { transform: rotate(-90deg); }
+    90%, 100% { transform: rotate(0deg); }
+  }
+  .rotateTitle { font-size: 22px; font-weight: 800; color: #ffd76a; margin-bottom: 10px; letter-spacing: 1px; }
+  .rotateDesc { font-size: 14px; color: #b0d4e8; max-width: 380px; line-height: 1.6; margin-bottom: 22px; }
+  .rotateBtn {
+    padding: 10px 24px;
+    border-radius: 20px;
+    background: rgba(255, 215, 106, 0.18);
+    border: 1px solid #ffd76a;
+    color: #ffd76a;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .rotateBtn:hover {
+    background: #ffd76a;
+    color: #05131f;
+  }
+
+  /* ===== Landscape phone optimization (primary target: play in landscape) ===== */
+
+  /* Tier 1 — typical landscape phones, e.g. 700-950px wide, 320-540px tall */
+  @media (max-height: 540px) and (orientation: landscape) {
+    header { height: 46px; padding: 4px 14px; padding-top: calc(4px + env(safe-area-inset-top)); }
+    .title { font-size: 15px; gap: 5px; }
+    .subtitle { display: none; }
+    .hud { gap: 8px; }
+    .hudBox { min-width: 78px; padding: 3px 9px; border-radius: 9px; }
+    .hudLabel { font-size: 8px; }
+    .hudValue { font-size: 14px; }
+    #fullscreenBtn { width: 30px; height: 30px; font-size: 14px; margin-left: 6px; }
+    #advice { top: 8px; padding: 6px 16px; width: min(480px, calc(100% - 220px)); border-radius: 12px; }
+    #advice b { font-size: 11px; letter-spacing: .5px; }
+    .adviceText { font-size: 12px; margin-top: 2px; line-height: 1.3; }
+    #fogToast { top: 44px; font-size: 11px; padding: 6px 14px; }
+    #status { display: none; }
+
+    /* Wheel gets to be the hero control — enlarge tap targets since width is plentiful */
+    #wheelPanel { width: 132px; padding: 7px; right: calc(14px + env(safe-area-inset-right)); bottom: calc(14px + env(safe-area-inset-bottom)); }
+    .panelTitle { font-size: 10px; margin-bottom: 5px; }
+    .wheel { width: 100px; height: 100px; }
+    .spoke { height: 66px; }
+    .hub { width: 24px; height: 24px; }
+    .dirBtn { min-width: 30px; height: 24px; font-size: 10px; }
+    .smallHint { font-size: 9px; margin-top: 4px; }
+  }
+
+  /* Tier 2 — very short landscape (small phones / split-screen), e.g. iPhone SE landscape */
+  @media (max-height: 400px) and (orientation: landscape) {
+    header { height: 38px; padding: 3px 12px; }
+    .title { font-size: 13px; }
+    .hudBox { min-width: 64px; padding: 2px 7px; }
+    .hudLabel { font-size: 7px; }
+    .hudValue { font-size: 12px; }
+    #fullscreenBtn { width: 26px; height: 26px; font-size: 12px; }
+    #advice { top: 5px; padding: 4px 12px; width: min(420px, calc(100% - 190px)); }
+    #advice b { font-size: 10px; }
+    .adviceText { font-size: 10.5px; }
+    #fogToast { top: 36px; font-size: 10px; padding: 5px 12px; }
+    #wheelPanel { width: 108px; padding: 5px; right: calc(10px + env(safe-area-inset-right)); bottom: calc(10px + env(safe-area-inset-bottom)); }
+    .panelTitle { font-size: 9px; margin-bottom: 3px; }
+    .wheel { width: 80px; height: 80px; }
+    .spoke { height: 52px; }
+    .hub { width: 20px; height: 20px; border-width: 3px; }
+    .dirBtn { min-width: 24px; height: 20px; font-size: 9px; }
+    .smallHint { display: none; }
+    #message { padding: 18px; }
+    #message h2 { font-size: 20px; margin-bottom: 8px; }
+    .msg { font-size: 13px; line-height: 1.4; }
+    #restart { margin-top: 12px; padding: 9px 20px; font-size: 13px; }
+  }
+
+  /* Portrait phones/tablets (fallback if the rotate prompt is dismissed) */
+  @media (max-width: 800px) and (orientation: portrait) {
+    header { height: 66px; padding: 8px 12px; }
+    .title { font-size: 17px; }
+    .subtitle { display: none; }
+    .hudBox { min-width: 92px; padding: 5px 8px; }
+    .hudBox:nth-child(2) { display: none; }
+    #advice { top: 10px; padding: 8px 12px; }
+    .adviceText { font-size: 13px; }
+    #status { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+<div id="rotateOverlay">
+  <div class="phoneIcon">📱</div>
+  <div class="rotateTitle">🧭 建議旋轉裝置為橫式</div>
+  <div class="rotateDesc">水手請注意！為了獲得最佳的海圖視野與舵輪操控體驗，請將您的手機或平板轉為橫向螢幕。</div>
+  <button class="rotateBtn" id="dismissRotate">了解，繼續航行</button>
+</div>
+
+<header>
+  <div>
+    <div class="title">⚓ 航海任務｜方位角實戰探索</div>
+    <div class="subtitle">依據船長方位角指示前進，航越海霧尋找寶藏島</div>
+  </div>
+  <div class="hud">
+    <div class="hudBox"><div class="hudLabel">剩餘航行時間</div><div class="hudValue" id="time">90</div></div>
+    <div class="hudBox"><div class="hudLabel">航程進度</div><div class="hudValue" id="progress">0%</div></div>
+    <button id="fullscreenBtn" title="全螢幕橫向模式" aria-label="全螢幕橫向模式">⛶</button>
+  </div>
+</header>
+
+<div id="main">
+<canvas id="sea"></canvas>
+
+<div id="advice">
+  <b>🧭 船長領航日誌</b>
+  <div class="adviceText" id="adviceText">「水手們！海面上濃霧瀰漫，請依據方位角指示升帆起航！」</div>
+</div>
+
+<div id="fogToast">✨ 航程已達三分之一！前方海霧散去，目視寶藏島！</div>
+<div id="status">地圖狀態：擴大探勘區域　｜　目標：未知秘境 🏝️</div>
+
+<div id="wheelPanel">
+  <div class="panelTitle">舵輪｜選擇航向角度</div>
+  <div class="wheel" id="wheelControl">
+    <div class="wheelRotor" id="wheelRotor">
+      <div class="wheelRing"></div>
+      <div class="spoke" style="transform:translate(-50%,-100%) rotate(0deg)"></div>
+      <div class="spoke" style="transform:translate(-50%,-100%) rotate(45deg)"></div>
+      <div class="spoke" style="transform:translate(-50%,-100%) rotate(90deg)"></div>
+      <div class="spoke" style="transform:translate(-50%,-100%) rotate(135deg)"></div>
+      <div class="spoke" style="transform:translate(-50%,-100%) rotate(180deg)"></div>
+      <div class="spoke" style="transform:translate(-50%,-100%) rotate(225deg)"></div>
+      <div class="spoke" style="transform:translate(-50%,-100%) rotate(270deg)"></div>
+      <div class="spoke" style="transform:translate(-50%,-100%) rotate(315deg)"></div>
+      <div class="hub"></div>
+    </div>
+    <button class="dirBtn bN" data-deg="0">0</button>
+    <button class="dirBtn bNE" data-deg="45">45</button>
+    <button class="dirBtn bE" data-deg="90">90</button>
+    <button class="dirBtn bSE" data-deg="135">135</button>
+    <button class="dirBtn bS" data-deg="180">180</button>
+    <button class="dirBtn bSW" data-deg="225">225</button>
+    <button class="dirBtn bW" data-deg="270">270</button>
+    <button class="dirBtn bNW" data-deg="315">315</button>
+  </div>
+  <div class="smallHint">0表示北方，順時針增加方位角</div>
+</div>
+
+<div id="message">
+  <h2 id="msgTitle"></h2>
+  <div class="msg" id="msgText"></div>
+  <button id="restart">重新準備航行</button>
+</div>
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById('sea'), ctx = canvas.getContext('2d');
+const timeEl = document.getElementById('time'), progressEl = document.getElementById('progress');
+const adviceText = document.getElementById('adviceText'), fogToast = document.getElementById('fogToast');
+const wheelRotor = document.getElementById('wheelRotor');
+const message = document.getElementById('message'), msgTitle = document.getElementById('msgTitle'), msgText = document.getElementById('msgText');
+
+const rotateOverlay = document.getElementById('rotateOverlay');
+const dismissRotate = document.getElementById('dismissRotate');
+let rotateDismissed = false;
+
+function checkOrientation() {
+  const isPortrait = window.innerHeight > window.innerWidth;
+  const isMobileOrTablet = window.innerWidth <= 1024 || ('ontouchstart' in window);
+  
+  if (isPortrait && isMobileOrTablet && !rotateDismissed) {
+    rotateOverlay.classList.remove('hidden');
+  } else {
+    rotateOverlay.classList.add('hidden');
+  }
+}
+
+if (dismissRotate) {
+  dismissRotate.addEventListener('click', () => {
+    rotateDismissed = true;
+    rotateOverlay.classList.add('hidden');
+  });
+}
+
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+async function toggleFullscreen() {
+  try {
+    if (!document.fullscreenElement) {
+      await (document.documentElement.requestFullscreen ? document.documentElement.requestFullscreen() : Promise.resolve());
+      if (screen.orientation && screen.orientation.lock) {
+        try { await screen.orientation.lock('landscape'); } catch (e) { /* not supported on this device, ignore */ }
+      }
+      fullscreenBtn.textContent = '⛶';
+    } else {
+      if (document.exitFullscreen) await document.exitFullscreen();
+    }
+  } catch (e) { /* fullscreen not available (e.g. iOS Safari) — silently ignore */ }
+}
+if (fullscreenBtn) fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+let W = 0, H = 0, timer = null;
+
+// Expanded World Boundaries
+const WORLD = { minX: -14.0, maxX: 14.0, minZ: 0, maxZ: 50.0 };
+
+// Game State
+const state = {
+  x: 0,
+  z: 40.0,
+  start: { x: 0, z: 40.0 },
+  heading: 0,
+  time: 90,
+  done: false,
+  started: false,
+  islandRevealed: false,
+  totalDist: 1
+};
+
+let target = { x: 0, z: 3 };
+let reefs = [];
+let waveZones = [];
+let currentScenarioName = "";
+
+// 5 Expanded Scenarios with targets in various directions
+const scenarioTemplates = [
+  {
+    name: "【東北遠航線】穿越沉船狹灣與暗礁",
+    start: { x: -10.0, z: 42.0 },
+    target: { x: 10.0, z: 8.0 },
+    reefs: [
+      [-6.0, 38, 1.5], [-2.0, 36, 1.4], [2.0, 32, 1.6], [5.0, 28, 1.5],
+      [-8.0, 30, 1.4], [0.0, 26, 1.5], [6.0, 22, 1.3], [-4.0, 22, 1.6],
+      [3.0, 18, 1.4], [-1.0, 15, 1.5], [7.0, 14, 1.4], [-5.0, 10, 1.3],
+      [2.0, 9, 1.5], [8.0, 35, 1.4], [-9.0, 18, 1.5], [4.0, 40, 1.3],
+      [0.0, 44, 1.4], [-3.0, 6, 1.5]
+    ]
+  },
+  {
+    name: "【西南逆浪線】南下探尋迷霧南方群島",
+    start: { x: 10.0, z: 8.0 },
+    target: { x: -10.0, z: 42.0 },
+    reefs: [
+      [6.0, 12, 1.5], [2.0, 14, 1.4], [-2.0, 18, 1.6], [-5.0, 22, 1.5],
+      [8.0, 20, 1.4], [0.0, 24, 1.5], [-6.0, 28, 1.3], [4.0, 28, 1.6],
+      [-3.0, 32, 1.4], [1.0, 35, 1.5], [-7.0, 36, 1.4], [5.0, 40, 1.3],
+      [-2.0, 41, 1.5], [-8.0, 15, 1.4], [9.0, 32, 1.5], [-4.0, 10, 1.3],
+      [0.0, 6, 1.4], [3.0, 44, 1.5]
+    ]
+  },
+  {
+    name: "【東南破浪線】橫渡狂濤，航向東南祕境",
+    start: { x: -11.0, z: 10.0 },
+    target: { x: 11.0, z: 40.0 },
+    reefs: [
+      [-7.0, 14, 1.5], [-3.0, 18, 1.4], [1.0, 20, 1.6], [5.0, 24, 1.5],
+      [-8.0, 28, 1.4], [-1.0, 28, 1.5], [4.0, 32, 1.3], [8.0, 35, 1.6],
+      [-4.0, 36, 1.4], [2.0, 38, 1.5], [6.0, 42, 1.4], [-9.0, 20, 1.3],
+      [0.0, 12, 1.5], [7.0, 16, 1.4], [-5.0, 42, 1.5], [3.0, 10, 1.3],
+      [-2.0, 24, 1.4], [9.0, 25, 1.5]
+    ]
+  },
+  {
+    name: "【西北衝鋒線】避開湧浪，遠征西北寶島",
+    start: { x: 10.0, z: 42.0 },
+    target: { x: -10.0, z: 9.0 },
+    reefs: [
+      [6.0, 38, 1.5], [2.0, 34, 1.4], [-2.0, 30, 1.6], [-6.0, 26, 1.5],
+      [8.0, 28, 1.4], [0.0, 22, 1.5], [-4.0, 20, 1.3], [-8.0, 16, 1.6],
+      [3.0, 18, 1.4], [-1.0, 14, 1.5], [-6.0, 12, 1.4], [5.0, 10, 1.3],
+      [-3.0, 7, 1.5], [7.0, 20, 1.4], [-9.0, 34, 1.5], [4.0, 44, 1.3],
+      [-1.0, 42, 1.4], [2.0, 6, 1.5]
+    ]
+  },
+  {
+    name: "【正東橫斷線】蛇形穿梭迷宮礁海",
+    start: { x: -11.0, z: 25.0 },
+    target: { x: 11.0, z: 25.0 },
+    reefs: [
+      [-7.0, 25, 1.8], [-3.0, 21, 1.5], [-3.0, 29, 1.5], [1.0, 25, 1.8],
+      [5.0, 21, 1.5], [5.0, 29, 1.5], [9.0, 25, 1.8], [-9.0, 18, 1.4],
+      [-9.0, 32, 1.4], [-1.0, 17, 1.5], [-1.0, 33, 1.5], [3.0, 17, 1.4],
+      [3.0, 33, 1.4], [7.0, 18, 1.5], [7.0, 32, 1.5], [0.0, 25, 1.3],
+      [-5.0, 12, 1.4], [5.0, 38, 1.4]
+    ]
+  }
+];
+
+function worldToScreen(x, z) {
+  const pad = 24, top = 80, bottom = 24;
+  const sx = pad + (x - WORLD.minX) / (WORLD.maxX - WORLD.minX) * (W - pad * 2);
+  const sy = top + (z - WORLD.minZ) / (WORLD.maxZ - WORLD.minZ) * (H - top - bottom);
+  return [sx, sy];
+}
+
+function resize() {
+  W = canvas.width = canvas.clientWidth;
+  H = canvas.height = canvas.clientHeight;
+  checkOrientation();
+  adjustWheelPosition();
+  if (typeof draw === 'function') draw();
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => {
+  setTimeout(resize, 200);
+});
+
+function adjustWheelPosition() {
+  const panel = document.getElementById('wheelPanel');
+  if (!panel || !W || !H) return;
+
+  const [sx, sy] = worldToScreen(state.start.x, state.start.z);
+  const [tx, ty] = worldToScreen(target.x, target.z);
+
+  // Candidate corner positions with panel center coordinates
+  const candidates = [
+    { pos: { right: '20px', bottom: '20px', left: 'auto', top: 'auto' }, cx: W - 85, cy: H - 95 },
+    { pos: { left: '20px', bottom: '20px', right: 'auto', top: 'auto' }, cx: 85, cy: H - 95 },
+    { pos: { right: '20px', top: '100px', left: 'auto', bottom: 'auto' }, cx: W - 85, cy: 185 },
+    { pos: { left: '20px', top: '100px', right: 'auto', bottom: 'auto' }, cx: 85, cy: 185 }
+  ];
+
+  let bestCandidate = candidates[0];
+  let maxMinDist = -1;
+
+  // Find candidate corner that maximizes clearance from both start and target positions
+  candidates.forEach(c => {
+    const distToStart = Math.hypot(c.cx - sx, c.cy - sy);
+    const distToTarget = Math.hypot(c.cx - tx, c.cy - ty);
+    const minDist = Math.min(distToStart, distToTarget);
+
+    if (minDist > maxMinDist) {
+      maxMinDist = minDist;
+      bestCandidate = c;
+    }
+  });
+
+  panel.style.left = bestCandidate.pos.left;
+  panel.style.right = bestCandidate.pos.right;
+  panel.style.top = bestCandidate.pos.top;
+  panel.style.bottom = bestCandidate.pos.bottom;
+}
+
+function distance(a, b) {
+  return Math.hypot(a.x - b.x, a.z - b.z);
+}
+
+function headingName(d) {
+  const names = ['0 N (正北)', '45 NE (東北)', '90 E (正東)', '135 SE (東南)', '180 S (正南)', '225 SW (西南)', '270 W (正西)', '315 NW (西北)'];
+  const idx = Math.round(((d % 360) + 360) % 360 / 45) % 8;
+  return names[idx];
+}
+
+function loadScenario() {
+  const tmpl = scenarioTemplates[Math.floor(Math.random() * scenarioTemplates.length)];
+  currentScenarioName = tmpl.name;
+  state.x = tmpl.start.x;
+  state.z = tmpl.start.z;
+  state.start = { x: tmpl.start.x, z: tmpl.start.z };
+  state.heading = 0;
+  state.time = 90;
+  state.done = false;
+  state.started = false;
+  state.islandRevealed = false;
+
+  target = { ...tmpl.target };
+  state.totalDist = distance(state.start, target);
+
+  reefs = tmpl.reefs.map(r => ({ x: r[0], z: r[1], r: r[2] * 0.5 }));
+
+  waveZones = [];
+  
+  // 地圖周邊區域產生浪高 2.0m 以上巨浪壁，迫使玩家從地圖中央通道穿越礁石區
+  for (let z = 3; z <= 47; z += 3.5) {
+    // 左側周邊巨浪壁 (x ≈ -12 ~ -8.5)
+    waveZones.push({ x: -12.0, z: z, h: +(2.1 + Math.random() * 0.5).toFixed(1), r: 2.2 });
+    waveZones.push({ x: -8.5, z: z + 1.7, h: +(2.0 + Math.random() * 0.4).toFixed(1), r: 2.0 });
+    
+    // 右側周邊巨浪壁 (x ≈ 8.5 ~ 12)
+    waveZones.push({ x: 12.0, z: z, h: +(2.1 + Math.random() * 0.5).toFixed(1), r: 2.2 });
+    waveZones.push({ x: 8.5, z: z + 1.7, h: +(2.0 + Math.random() * 0.4).toFixed(1), r: 2.0 });
+  }
+
+  for (let x = -13; x <= 13; x += 3.5) {
+    if (Math.abs(x) > 4.5) {
+      // 上邊界巨浪壁
+      waveZones.push({ x: x, z: 3.0, h: +(2.2 + Math.random() * 0.4).toFixed(1), r: 2.2 });
+      // 下邊界巨浪壁
+      waveZones.push({ x: x, z: 47.0, h: +(2.2 + Math.random() * 0.4).toFixed(1), r: 2.2 });
+    }
+  }
+
+  // 地圖中央通道（x 在 -4 ~ 4 之間）設置安全浪高 (0.8m ~ 1.4m)，玩家可通行但需應對礁石
+  for (let z = 7; z <= 43; z += 5) {
+    for (let x = -4; x <= 4; x += 4) {
+      waveZones.push({
+        x: x + (Math.random() - 0.5) * 1.2,
+        z: z + (Math.random() - 0.5) * 1.2,
+        h: +(0.8 + Math.random() * 0.6).toFixed(1),
+        r: 1.3
+      });
+    }
+  }
+
+  // 移除起點與終點緊鄰區域的 >2.0m 巨浪，確保起航與登島順暢
+  waveZones = waveZones.filter(w => {
+    const distToStart = Math.hypot(w.x - state.start.x, w.z - state.start.z);
+    const distToTarget = Math.hypot(w.x - target.x, w.z - target.z);
+    if ((distToStart < 3.2 || distToTarget < 3.2) && w.h >= 2.0) {
+      return false;
+    }
+    return true;
+  });
+
+  const statusEl = document.getElementById('status');
+  if (statusEl) statusEl.textContent = `航線：${currentScenarioName}`;
+
+  message.style.display = 'none';
+  fogToast.classList.remove('show');
+  adjustWheelPosition();
+  updateHUD();
+  updateAdvice();
+  draw();
+
+  if (wheelRotor) wheelRotor.style.transform = 'rotate(0deg)';
+  clearInterval(timer);
+  timer = setInterval(tick, 100);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // Ocean gradient background
+  const oceanGrad = ctx.createLinearGradient(0, 0, 0, H);
+  oceanGrad.addColorStop(0, '#073c52');
+  oceanGrad.addColorStop(1, '#031c2b');
+  ctx.fillStyle = oceanGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Dynamic wave grid lines
+  ctx.globalAlpha = .14;
+  for (let y = 80; y < H; y += 36) {
+    ctx.beginPath();
+    for (let x = 0; x < W; x += 16) {
+      ctx.lineTo(x, y + Math.sin(x * .02 + y * .01) * 3);
+    }
+    ctx.strokeStyle = '#8ee3f0';
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Map Boundary Dotted Corridor
+  const [lx] = worldToScreen(WORLD.minX, 0), [rx] = worldToScreen(WORLD.maxX, 0);
+  ctx.strokeStyle = 'rgba(255,255,255,.12)';
+  ctx.setLineDash([6, 6]);
+  ctx.strokeRect(lx, 80, rx - lx, H - 104);
+  ctx.setLineDash([]);
+
+  // Wave Zones
+  waveZones.forEach(q => {
+    const [x, y] = worldToScreen(q.x, q.z);
+    const rr = q.r * (W / (WORLD.maxX - WORLD.minX));
+    const alpha = Math.min(.45, .12 + q.h * .12);
+    ctx.beginPath();
+    ctx.arc(x, y, rr, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(10, 30, 48, ${alpha})`;
+    ctx.fill();
+    ctx.fillStyle = 'rgba(200,240,255,.6)';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(q.h + 'm', x, y + 3);
+  });
+
+  // Reef Hazards
+  reefs.forEach(q => {
+    const [x, y] = worldToScreen(q.x, q.z);
+    const rr = q.r * (W / (WORLD.maxX - WORLD.minX));
+    
+    ctx.beginPath();
+    ctx.arc(x, y, rr, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(20,40,48,.35)';
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = '#4c5963';
+    ctx.strokeStyle = '#c0d0d8';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (let a = 0; a < 8; a++) {
+      let ang = a * Math.PI / 4, rad = 10 + (a % 3) * 4;
+      ctx.lineTo(Math.cos(ang) * rad, Math.sin(ang) * rad * .7);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(255,220,220,.75)';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('暗礁', x, y + rr + 12);
+  });
+
+  // Target Island Rendering (Hidden under fog until 1/3 progress reached)
+  const [tx, ty] = worldToScreen(target.x, target.z);
+  if (state.islandRevealed) {
+    ctx.beginPath();
+    ctx.arc(tx, ty, 32, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,215,0,.22)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(tx, ty, 22, 0, Math.PI * 2);
+    ctx.fillStyle = '#e8b838';
+    ctx.fill();
+    ctx.strokeStyle = '#fff2a8';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#102230';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🏝️', tx, ty + 7);
+
+    ctx.fillStyle = '#ffd76a';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillText('寶藏島', tx, ty + 38);
+  } else {
+    const fogRadius = Math.max(W, H) * 0.32;
+    const fogGrad = ctx.createRadialGradient(tx, ty, 10, tx, ty, fogRadius);
+    fogGrad.addColorStop(0, 'rgba(225, 245, 255, 0.98)');
+    fogGrad.addColorStop(0.5, 'rgba(180, 215, 235, 0.88)');
+    fogGrad.addColorStop(0.8, 'rgba(140, 185, 210, 0.55)');
+    fogGrad.addColorStop(1, 'rgba(140, 185, 210, 0)');
+    ctx.fillStyle = fogGrad;
+    ctx.beginPath();
+    ctx.arc(tx, ty, fogRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Layered cloud puffs to expand visually to 1/3 of map region
+    const cloudOffsets = [
+      [-0.4, -0.2, 0.6], [0.4, -0.3, 0.55], [-0.3, 0.3, 0.65],
+      [0.35, 0.35, 0.58], [0, 0, 0.75]
+    ];
+    cloudOffsets.forEach(([ox, oy, scale]) => {
+      const cx = tx + ox * fogRadius * 0.6;
+      const cy = ty + oy * fogRadius * 0.6;
+      const cr = fogRadius * scale * 0.55;
+      const subGrad = ctx.createRadialGradient(cx, cy, 5, cx, cy, cr);
+      subGrad.addColorStop(0, 'rgba(235, 248, 255, 0.9)');
+      subGrad.addColorStop(0.7, 'rgba(190, 220, 240, 0.6)');
+      subGrad.addColorStop(1, 'rgba(160, 200, 225, 0)');
+      ctx.fillStyle = subGrad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.shadowBlur = 4;
+    ctx.fillText('🌫️ 濃霧鎖島（航程達 1/3 散霧）', tx, ty + 5);
+    ctx.shadowBlur = 0;
+  }
+
+  // Ship Center Screen Position
+  const [sx, sy] = worldToScreen(state.x, state.z);
+  const headingRad = state.heading * Math.PI / 180;
+
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  // Ship Shadow
+  ctx.save();
+  ctx.rotate(headingRad);
+  ctx.translate(2, 6);
+  ctx.fillStyle = 'rgba(0,0,0,.35)';
+  ctx.beginPath();
+  ctx.ellipse(0, 2, 18, 11, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Boat Hull & Deck (Rotates with state.heading)
+  ctx.save();
+  ctx.rotate(headingRad);
+
+  const hullGrad = ctx.createLinearGradient(-18, 0, 18, 0);
+  hullGrad.addColorStop(0, '#4a2813');
+  hullGrad.addColorStop(.5, '#935327');
+  hullGrad.addColorStop(1, '#4a2813');
+  ctx.fillStyle = hullGrad;
+  ctx.strokeStyle = '#10222b';
+  ctx.lineWidth = 1.8;
+
+  ctx.beginPath();
+  ctx.moveTo(0, -12);
+  ctx.lineTo(18, 2);
+  ctx.lineTo(11, 12);
+  ctx.lineTo(-11, 12);
+  ctx.lineTo(-18, 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  const deckGrad = ctx.createLinearGradient(-13, -6, 13, 6);
+  deckGrad.addColorStop(0, '#784d24');
+  deckGrad.addColorStop(.5, '#d0a26b');
+  deckGrad.addColorStop(1, '#784d24');
+  ctx.fillStyle = deckGrad;
+  ctx.beginPath();
+  ctx.roundRect(-13, -6, 26, 14, 3);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  // Sail Geometry Mandate: Apex stays fixed pointing UP, Bottom corners rotate with ship
+  const cosH = Math.cos(headingRad), sinH = Math.sin(headingRad);
+  
+  const blX = -16 * cosH - (-2) * sinH;
+  const blY = -16 * sinH + (-2) * cosH;
+
+  const brX = 18 * cosH - (-2) * sinH;
+  const brY = 18 * sinH + (-2) * cosH;
+
+  const mbX = 0 * cosH - (-2) * sinH;
+  const mbY = 0 * sinH + (-2) * cosH;
+
+  const topX = mbX;
+  const topY = mbY - 38; 
+
+  ctx.strokeStyle = '#e6c896';
+  ctx.lineWidth = 3.5;
+  ctx.beginPath();
+  ctx.moveTo(mbX, mbY);
+  ctx.lineTo(topX, topY);
+  ctx.stroke();
+
+  const sailGrad = ctx.createLinearGradient(topX, topY, brX, brY);
+  sailGrad.addColorStop(0, '#ffffff');
+  sailGrad.addColorStop(0.6, '#f3ebd1');
+  sailGrad.addColorStop(1, '#aa9e8a');
+  ctx.fillStyle = sailGrad;
+  ctx.strokeStyle = '#384852';
+  ctx.lineWidth = 1.2;
+
+  ctx.beginPath();
+  ctx.moveTo(topX, topY);
+  ctx.lineTo(mbX, mbY);
+  ctx.lineTo(brX, brY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  const jibGrad = ctx.createLinearGradient(topX, topY, blX, blY);
+  jibGrad.addColorStop(0, '#ffffff');
+  jibGrad.addColorStop(1, '#b8c7cc');
+  ctx.fillStyle = jibGrad;
+
+  ctx.beginPath();
+  ctx.moveTo(topX, topY);
+  ctx.lineTo(mbX, mbY);
+  ctx.lineTo(blX, blY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#e74c3c';
+  ctx.beginPath();
+  ctx.moveTo(topX, topY);
+  ctx.lineTo(topX + 11, topY + 3);
+  ctx.lineTo(topX, topY + 7);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+
+  // Heading Line (Dotted direction indicator)
+  ctx.save();
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(sx + Math.sin(headingRad) * 55, sy - Math.cos(headingRad) * 55);
+  ctx.strokeStyle = 'rgba(255,255,255,.85)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function updateHUD() {
+  timeEl.textContent = Math.max(0, Math.ceil(state.time));
+  const currDist = distance(state, target);
+  const progressRatio = Math.max(0, Math.min(1, (state.totalDist - currDist) / state.totalDist));
+  const progressPercent = Math.round(progressRatio * 100);
+  progressEl.textContent = progressPercent + '%';
+
+  if (!state.islandRevealed && progressRatio >= 0.33) {
+    state.islandRevealed = true;
+    fogToast.classList.add('show');
+    setTimeout(() => fogToast.classList.remove('show'), 3500);
+  }
+}
+
+function updateAdvice() {
+  const dx = target.x - state.x, dz = target.z - state.z;
+  const deg = (Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360;
+  const rounded = Math.round(deg / 45) * 45 % 360;
+  const name = headingName(rounded);
+
+  const nearbyReef = reefs.find(r => distance(state, r) < 3.2);
+  const nearbyWave = waveZones.find(w => distance(state, w) < 3.2 && w.h > 1.4);
+
+  let hazardWarning = "";
+  if (nearbyReef) {
+    hazardWarning = ` ⚠️ <span style="color:#ff8b8b">觀察前方！附近水域隱藏尖銳暗礁，小心切勿直接撞擊！</span>`;
+  } else if (nearbyWave) {
+    hazardWarning = ` 🌊 <span style="color:#71d7ff">注意風浪！前方有 ${nearbyWave.h}m 強浪，若浪過高將無法通行！</span>`;
+  }
+
+  if (!state.islandRevealed) {
+    const unrevealedPhrases = [
+      `「舵手請注意！海圖推算寶藏島正位於方位角 <b style="color:#ffd76a">${name}</b>。航行過三分之一後海霧才會散去，掌穩舵輪！」`,
+      `「全體水手！根據羅盤指示，請朝 <b style="color:#ffd76a">${name}</b> 航向破浪前進！留意沿途暗礁阻礙。」`,
+      `「前方濃霧迷茫！領航員測得目標方位角為 <b style="color:#ffd76a">${name}</b>，調整舵輪準備轉向！」`
+    ];
+    const baseText = unrevealedPhrases[Math.floor(Math.random() * unrevealedPhrases.length)];
+    adviceText.innerHTML = baseText + hazardWarning;
+  } else {
+    const revealedPhrases = [
+      `「目視寶藏島！它就在我們的方位角 <b style="color:#ffd76a">${name}</b> 方向！全速直航！」`,
+      `「海霧已散！寶藏島方位角為 <b style="color:#ffd76a">${name}</b>，注意避開兩側暗礁與高浪！」`,
+      `「報告船長！寶藏島鎖定在 <b style="color:#ffd76a">${name}</b>！保持警覺，順利完成航行任務！」`
+    ];
+    const baseText = revealedPhrases[Math.floor(Math.random() * revealedPhrases.length)];
+    adviceText.innerHTML = baseText + hazardWarning;
+  }
+}
+
+function fail(title, text) {
+  state.done = true;
+  clearInterval(timer);
+  msgTitle.textContent = title;
+  msgText.innerHTML = text;
+  message.style.display = 'block';
+}
+
+function win() {
+  state.done = true;
+  clearInterval(timer);
+  const code = 'Gly';
+  msgTitle.textContent = '🏝️ 成功抵達寶藏島！';
+  msgText.innerHTML = `太棒了！你完美運用方位角與導航決策，順利穿越濃霧與礁石。<br><br><strong style="font-size:22px;color:#ffd76a">通關勳章號：${code}</strong><br><br>你已成功掌握國中方位角實戰應用技能！`;
+  message.style.display = 'block';
+}
+
+function move(deg) {
+  if (state.done) return;
+  state.started = true;
+  state.heading = deg;
+  
+  if (wheelRotor) wheelRotor.style.transform = `rotate(${deg}deg)`;
+
+  const rad = deg * Math.PI / 180;
+  const step = 0.95;
+  const nextX = state.x + Math.sin(rad) * step;
+  const nextZ = state.z - Math.cos(rad) * step;
+
+  const blockingWave = waveZones.find(q => Math.hypot(nextX - q.x, nextZ - q.z) < q.r && q.h > 1.6);
+  if (blockingWave) {
+    const wdeg = (Math.atan2(target.x - state.x, -(target.z - state.z)) * 180 / Math.PI + 360) % 360;
+    const wrounded = Math.round(wdeg / 45) * 45 % 360;
+    adviceText.innerHTML = `「⚠ 前方遭遇高達 <b style="color:#ff6b6b">${blockingWave.h}m</b> 的巨浪阻擋！請改擇 <b style="color:#ffd76a">${headingName(wrounded)}</b> 繞道！」`;
+    state.time -= 0.4;
+    updateHUD();
+    draw();
+    return;
+  }
+
+  state.x = Math.max(WORLD.minX, Math.min(WORLD.maxX, nextX));
+  state.z = Math.max(WORLD.minZ, Math.min(WORLD.maxZ, nextZ));
+
+  for (const q of reefs) {
+    if (Math.hypot(state.x - q.x, state.z - q.z) < q.r) {
+      draw();
+      updateHUD();
+      fail('⚓ 觸礁擱淺！', '船隻不幸撞擊海面暗礁！<br>請重新審視方位角航線後再試一次。');
+      return;
+    }
+  }
+
+  if (distance(state, target) < 1.4) {
+    draw();
+    updateHUD();
+    win();
+    return;
+  }
+
+  updateHUD();
+  updateAdvice();
+  draw();
+}
+
+function tick() {
+  if (state.done) return;
+  state.time -= 0.1;
+  updateHUD();
+  if (state.time <= 0) {
+    state.time = 0;
+    updateHUD();
+    fail('⏱️ 航行時間耗盡！', '90 秒航行時間已結束。<br>船隻未能及時抵達寶藏島，任務失敗。');
+  }
+}
+
+function vibrate(ms) {
+  if (navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) {} }
+}
+
+document.querySelectorAll('.dirBtn').forEach(b => {
+  b.addEventListener('click', () => { vibrate(12); move(Number(b.dataset.deg)); });
+});
+
+document.getElementById('restart').addEventListener('click', loadScenario);
+
+// Drag-to-steer: let players spin the wheel with a finger/mouse drag, snapping to the
+// nearest 45° heading on release — a faster, more tactile control for landscape play.
+(function setupWheelDrag() {
+  const wheelEl = document.getElementById('wheelControl');
+  if (!wheelEl || !wheelRotor) return;
+  let dragging = false, startAngle = 0, baseHeading = 0;
+
+  function angleAt(clientX, clientY) {
+    const rect = wheelEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    return Math.atan2(clientX - cx, -(clientY - cy)) * 180 / Math.PI;
+  }
+
+  function onDown(e) {
+    if (state.done) return;
+    dragging = true;
+    wheelEl.classList.add('dragging');
+    wheelRotor.classList.add('noTransition');
+    const p = e.touches ? e.touches[0] : e;
+    startAngle = angleAt(p.clientX, p.clientY);
+    baseHeading = state.heading;
+    e.preventDefault();
+  }
+
+  function onMove(e) {
+    if (!dragging) return;
+    const p = e.touches ? e.touches[0] : e;
+    const cur = angleAt(p.clientX, p.clientY);
+    let deg = ((baseHeading + (cur - startAngle)) % 360 + 360) % 360;
+    wheelRotor.style.transform = `rotate(${deg}deg)`;
+    e.preventDefault();
+  }
+
+  function onUp(e) {
+    if (!dragging) return;
+    dragging = false;
+    wheelEl.classList.remove('dragging');
+    wheelRotor.classList.remove('noTransition');
+    const p = e.changedTouches ? e.changedTouches[0] : e;
+    const cur = angleAt(p.clientX, p.clientY);
+    let deg = ((baseHeading + (cur - startAngle)) % 360 + 360) % 360;
+    const snapped = Math.round(deg / 45) * 45 % 360;
+    vibrate(12);
+    move(snapped);
+  }
+
+  wheelEl.addEventListener('mousedown', onDown);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+  wheelEl.addEventListener('touchstart', onDown, { passive: false });
+  window.addEventListener('touchmove', onMove, { passive: false });
+  window.addEventListener('touchend', onUp);
+})();
+
+window.addEventListener('keydown', e => {
+  const map = { ArrowUp: 0, ArrowRight: 90, ArrowDown: 180, ArrowLeft: 270 };
+  if (e.key in map) move(map[e.key]);
+});
+
+// Startup Game
+resize();
+loadScenario();
+</script>
+</body>
+</html>
