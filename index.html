@@ -639,7 +639,7 @@ function draw() {
     
     ctx.beginPath();
     ctx.arc(x, y, rr, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(20,40,48,.35)';
+    ctx.fillStyle = 'rgba(10,20,24,.6)';
     ctx.fill();
 
     ctx.save();
@@ -649,18 +649,13 @@ function draw() {
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     for (let a = 0; a < 8; a++) {
-      let ang = a * Math.PI / 4, rad = 10 + (a % 3) * 4;
+      let ang = a * Math.PI / 4, rad = 6 + (a % 3) * 2.4;
       ctx.lineTo(Math.cos(ang) * rad, Math.sin(ang) * rad * .7);
     }
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
     ctx.restore();
-
-    ctx.fillStyle = 'rgba(255,220,220,.75)';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('暗礁', x, y + rr + 12);
   });
 
   const [tx, ty] = worldToScreen(target.x, target.z);
@@ -905,7 +900,7 @@ function win() {
   clearInterval(timer);
   const code = 'Gly';
   msgTitle.textContent = '🏝️ 成功抵達寶藏島！';
-  msgText.innerHTML = `太棒了！你完美運用方位角與導航決策，順利穿越濃霧與礁石。<br><br><strong style="font-size:22px;color:#ffd76a">裝飾品兌換代碼：${code}</strong><br><br>你已成功掌握方位角實戰應用技能！`;
+  msgText.innerHTML = `太棒了！你完美運用方位角與導航決策，順利穿越濃霧與礁石。<br><br><strong style="font-size:22px;color:#ffd76a">通關勳章號：${code}</strong><br><br>你已成功掌握國中方位角實戰應用技能！`;
   message.style.display = 'block';
 }
 
